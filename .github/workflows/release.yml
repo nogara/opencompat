@@ -41,3 +41,11 @@ jobs:
           args: release --clean
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  docker:
+    needs: release-please
+    if: ${{ needs.release-please.outputs.release_created }}
+    uses: ./.github/workflows/docker.yml
+    with:
+      tag: ${{ needs.release-please.outputs.tag_name }}
+    secrets: inherit

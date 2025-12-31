@@ -3,9 +3,15 @@ name: Build and Push Docker Image
 on:
   push:
     branches:
-      - main
+      - master
     tags:
       - "v*.*.*"
+  workflow_call:
+    inputs:
+      tag:
+        description: "Release tag (e.g., v1.2.3)"
+        required: false
+        type: string
 
 jobs:
   build-and-push:
@@ -20,7 +26,27 @@ jobs:
           username: ${{ vars.DOCKER_USERNAME }}
           password: ${{ secrets.DOCKER_PAT }}
 
+      - name: Normalize release tag
+        if: ${{ inputs.tag != '' }}
+        id: normalize
+        run: |
+          tag="${{ inputs.tag }}"
+          tag="${tag#v}"
+          echo "version=$tag" >> "$GITHUB_OUTPUT"
+
+      - name: Extract Docker metadata (release tag)
+        if: ${{ inputs.tag != '' }}
+        id: meta_release
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ vars.DOCKER_USERNAME }}/opencompat
+          tags: |
+            type=semver,pattern={{version}},value=${{ steps.normalize.outputs.version }}
+            type=semver,pattern={{major}}.{{minor}},value=${{ steps.normalize.outputs.version }}
+            type=semver,pattern={{major}},value=${{ steps.normalize.outputs.version }}
+
       - name: Extract Docker metadata
+        if: ${{ inputs.tag == '' }}
         id: meta
         uses: docker/metadata-action@v5
         with:
@@ -31,7 +57,17 @@ jobs:
             type=semver,pattern={{major}}
             type=raw,value=latest,enable={{is_default_branch}}
 
+      - name: Build and push Docker image (release)
+        if: ${{ inputs.tag != '' }}
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: true
+          tags: ${{ steps.meta_release.outputs.tags }}
+          labels: ${{ steps.meta_release.outputs.labels }}
+
       - name: Build and push Docker image
+        if: ${{ inputs.tag == '' }}
         uses: docker/build-push-action@v6
         with:
           context: .
